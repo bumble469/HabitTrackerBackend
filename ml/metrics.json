@@ -1,0 +1,25 @@
+{
+  "logistic_regression": {
+    "accuracy": 0.7947,
+    "f1": 0.644,
+    "roc_auc": 0.8699
+  },
+  "baseline_always_done": {
+    "accuracy": 0.7594,
+    "f1": 0.0,
+    "roc_auc": 0.5
+  },
+  "data": {
+    "file": "habit_logs.csv",
+    "habits_used": 800,
+    "habits_skipped_too_short": 0,
+    "train_rows": 46433,
+    "test_rows": 11494,
+    "at_risk_rate": 0.2336
+  },
+  "gradient_boosting": {
+    "accuracy": 0.8521,
+    "f1": 0.6691,
+    "roc_auc": 0.8823
+  }
+}

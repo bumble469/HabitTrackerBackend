@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+dev.db
+.pytest_cache/
+.idea/
+.vscode/
+# NOTE: ml/model.joblib is deliberately NOT ignored, so the deployed service can load it.
