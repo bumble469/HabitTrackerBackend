@@ -1,4 +1,4 @@
-"""Export and import of a user's habits (demo habits are never exported)."""
+"""Export and import of a user's account habits and completion history."""
 from datetime import timedelta
 
 from sqlalchemy.orm import Session
@@ -18,6 +18,7 @@ def export_user_data(db: Session, user: User) -> dict:
                 "name": h.name,
                 "description": h.description,
                 "created_on": h.created_on,
+                "scheduled_days": h.scheduled_days or list(range(7)),
                 "completed_dates": sorted(completions.get(h.id, set())),
             }
             for h in habits
@@ -36,6 +37,7 @@ def import_user_data(db: Session, user: User, body: ImportIn) -> dict:
             name=item.name.strip() or "Untitled habit",
             description=item.description,
             created_on=item.created_on,
+            scheduled_days=item.scheduled_days,
         )
         db.add(habit)
         db.flush()  # assigns habit.id

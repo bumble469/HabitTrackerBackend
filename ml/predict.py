@@ -65,14 +65,26 @@ def explain(model, features: dict, top_n: int = 2) -> list[str]:
 
 
 def score_habits(habits, completions: dict, today: date) -> list[dict]:
-    """habits: list of (habit_id, created_on). completions: {habit_id: set of dates}.
+    """habits: (habit_id, created_on[, scheduled_days]) tuples; completions map ids to dates.
 
     Features are computed as of yesterday because today may still be incomplete.
     """
-    model = get_model()
     as_of = today - timedelta(days=1)
     out = []
-    for habit_id, created_on in habits:
+    model = None
+    for habit_data in habits:
+        habit_id, created_on = habit_data[:2]
+        scheduled_days = habit_data[2] if len(habit_data) > 2 else None
+        if scheduled_days and set(scheduled_days) != set(range(7)):
+            out.append(
+                {
+                    "habit_id": habit_id,
+                    "risk": None,
+                    "level": "unsupported_schedule",
+                    "reasons": ["Risk estimates are not calibrated for custom schedules yet"],
+                }
+            )
+            continue
         if (as_of - created_on).days < MIN_HISTORY_DAYS:
             out.append(
                 {
@@ -83,6 +95,8 @@ def score_habits(habits, completions: dict, today: date) -> list[dict]:
                 }
             )
             continue
+        if model is None:
+            model = get_model()
         f = build_features(completions.get(habit_id, set()), created_on, as_of)
         p = float(model.predict_proba([[f[k] for k in FEATURES]])[0, 1])
         out.append(

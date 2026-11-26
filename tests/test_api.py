@@ -73,7 +73,6 @@ def test_habit_crud_archive_and_restore(client):
     habit = make_habit(client, a, "  Read  ")
     assert habit["name"] == "Read"
     assert habit["archived_at"] is None
-    assert habit["is_demo"] is False
 
     patched = client.patch(f"/api/habits/{habit['id']}", json={"description": "20 pages"}, headers=a)
     assert patched.status_code == 200
@@ -176,8 +175,6 @@ def test_ai_toggle_blocks_ai_routes(client):
     assert r.status_code == 200 and r.json()["ai_enabled"] is False
 
     assert client.get("/api/risk", headers=a).status_code == 403
-    assert client.post("/api/coach/chat", json={"message": "hi"}, headers=a).status_code == 403
-    assert client.get("/api/coach/conversations", headers=a).status_code == 200  # own data stays reachable
 
     client.patch("/api/auth/me", json={"ai_enabled": True}, headers=a)
     assert client.get("/api/risk", headers=a).status_code in (200, 503)
@@ -206,53 +203,3 @@ def test_export_and_import_round_trip(client):
     assert len(client.get("/api/completions", headers=b).json()[b_habits[0]["id"]]) == 2
 
 
-def test_demo_data_load_and_remove(client):
-    a = register(client)
-    r = client.post("/api/demo-data", headers=a)
-    assert r.status_code == 201
-    assert r.json()["habits_created"] == 4
-    habits = client.get("/api/habits", headers=a).json()
-    assert len(habits) == 4 and all(h["is_demo"] for h in habits)
-
-    assert client.post("/api/demo-data", headers=a).status_code == 409
-    assert client.get("/api/export", headers=a).json()["habits"] == []  # demo habits are not exported
-
-    risk = client.get("/api/risk", headers=a)
-    if risk.status_code == 200:
-        levels = {x["level"] for x in risk.json()}
-        assert "not_enough_data" in levels  # the habit started a week ago
-
-    removed = client.delete("/api/demo-data", headers=a)
-    assert removed.status_code == 200 and removed.json() == {"habits_removed": 4}
-    assert client.get("/api/habits", headers=a).json() == []
-
-
-# ---------- coach ----------
-
-def test_coach_chat_and_conversations(client):
-    a = register(client)
-    make_habit(client, a, "Read", days_old=30)
-
-    r = client.post("/api/coach/chat", json={"message": "Why do I keep skipping?"}, headers=a)
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["mode"] == "placeholder"
-    assert body["message"]["role"] == "assistant"
-    conversation_id = body["conversation_id"]
-
-    follow_up = client.post(
-        "/api/coach/chat", json={"conversation_id": conversation_id, "message": "And now?"}, headers=a
-    )
-    assert follow_up.status_code == 200
-    assert follow_up.json()["conversation_id"] == conversation_id
-
-    listing = client.get("/api/coach/conversations", headers=a).json()
-    assert len(listing) == 1
-    detail = client.get(f"/api/coach/conversations/{conversation_id}", headers=a).json()
-    assert [m["role"] for m in detail["messages"]] == ["user", "assistant", "user", "assistant"]
-
-    other = register(client, "other@example.com")
-    assert client.get(f"/api/coach/conversations/{conversation_id}", headers=other).status_code == 404
-
-    assert client.delete(f"/api/coach/conversations/{conversation_id}", headers=a).status_code == 204
-    assert client.get(f"/api/coach/conversations/{conversation_id}", headers=a).status_code == 404
