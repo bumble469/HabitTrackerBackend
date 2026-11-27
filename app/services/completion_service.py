@@ -19,7 +19,6 @@ def completions_map(
         db.scalars(        select(Habit.id).where(
             Habit.user_id == user.id,
             Habit.archived_at.is_(None),
-            Habit.is_demo.is_(False),
         ))
     )
     result: dict[str, list[date]] = {hid: [] for hid in habit_ids}

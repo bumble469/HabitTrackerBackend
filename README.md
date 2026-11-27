@@ -12,7 +12,7 @@ app/                    API
   config.py  db.py  models.py  schemas.py  deps.py  security.py
   routers/              thin route files: auth, habits, completions, transfer, risk, push
   services/             the logic behind the routes (controllers)
-    auth_service, habit_service, completion_service, transfer_service, demo_service, risk_service
+    auth_service, habit_service, completion_service, transfer_service, risk_service
     push_service        manages browser push subscriptions and notifications
     reminder_scheduler  sends scheduled habit reminders
 ml/                     machine learning
@@ -40,10 +40,10 @@ Create a `.env` file in the backend root and add the settings you need from the 
 | `JWT_SECRET` | yes with Postgres | Signs login tokens. Generate: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `CORS_ORIGINS` | no | Comma-separated frontend origins allowed to call the API (default `http://localhost:5173`). |
 | `PUSH_SCHEDULER_ENABLED` | no | Set to `true` to run habit reminders; requires VAPID settings and an always-on backend instance. |
-| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | for push | Web Push application server keys. Keep the private key secret. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | for push | Web Push application server keys. Generate them with `python scripts/generate_vapid_keys.py`. Keep the private key secret. |
 | `VAPID_SUBJECT` | for push | Contact URI for Web Push, such as `mailto:you@example.com`. |
 
-Tables are created on startup. `create_all` never changes an existing table. For an existing database, apply `migrations/001_add_habit_scheduled_days.sql` once before starting the updated backend. Existing habits remain scheduled every day.
+Tables are created on startup. `create_all` never changes an existing table. For an existing database, apply the files in `migrations/` once, in order (`001_...`, then `002_...`), before starting the updated backend. Existing habits remain scheduled every day. On a local `dev.db`, just delete the file instead.
 
 ### Run
 ```

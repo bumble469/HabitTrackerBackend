@@ -180,7 +180,7 @@ def test_ai_toggle_blocks_ai_routes(client):
     assert client.get("/api/risk", headers=a).status_code in (200, 503)
 
 
-# ---------- export / import / demo ----------
+# ---------- export / import ----------
 
 def test_export_and_import_round_trip(client):
     a = register(client, "a@example.com")

@@ -32,7 +32,7 @@ def get_owned_habit(db: Session, habit_id: str, user_id: str, include_archived: 
 
 def load_user_data(db: Session, user_id: str, include_archived: bool = False):
     """Return (habits, {habit_id: set of completed dates}) for one user."""
-    query = select(Habit).where(Habit.user_id == user_id, Habit.is_demo.is_(False))
+    query = select(Habit).where(Habit.user_id == user_id)
     if not include_archived:
         query = query.where(Habit.archived_at.is_(None))
     habits = list(db.scalars(query.order_by(Habit.created_on, Habit.id)))

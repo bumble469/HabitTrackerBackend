@@ -3,11 +3,10 @@ uvicorn[standard]>=0.30
 sqlalchemy>=2.0
 psycopg2-binary>=2.9
 python-dotenv>=1.0
-scikit-learn>=1.5,<2
+scikit-learn==1.9.1
 numpy>=1.26
 joblib>=1.4
-httpx>=0.27
 PyJWT>=2.8
 tzdata>=2024.1
-pywebpush 
+pywebpush
 apscheduler

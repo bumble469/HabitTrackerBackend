@@ -22,7 +22,6 @@ def export_user_data(db: Session, user: User) -> dict:
                 "completed_dates": sorted(completions.get(h.id, set())),
             }
             for h in habits
-            if not h.is_demo
         ],
     }
 

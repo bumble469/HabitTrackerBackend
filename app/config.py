@@ -26,6 +26,7 @@ if JWT_SECRET_IS_DEFAULT:
             'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(48))"'
         )
     JWT_SECRET = "dev-only-secret-change-me-before-deploying-0123456789"
+    
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "10080"))
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "").strip()
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "").strip()

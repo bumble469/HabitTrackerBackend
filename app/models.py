@@ -54,7 +54,6 @@ class Habit(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     created_on: Mapped[date] = mapped_column(Date, default=date.today)
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    is_demo: Mapped[bool] = mapped_column(Boolean, default=False)  
     reminder_time: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
     scheduled_days: Mapped[Optional[list[int]]] = mapped_column(
         JSON, nullable=True, default=lambda: list(range(7))

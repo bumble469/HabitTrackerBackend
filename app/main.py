@@ -3,13 +3,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import models  # noqa: F401  (registers tables with Base)
+from app import models 
 from app.config import CORS_ORIGINS, JWT_SECRET_IS_DEFAULT, PUSH_SCHEDULER_ENABLED
 from app.db import Base, engine
 from app.routers import auth, completions, habits, push, transfer
 from app.routers import risk as risk_routes
 from app.services import push_service, reminder_scheduler
-from ml.api import router as stateless_risk_router  # POST /api/risk, no login or database
+from ml.api import router as stateless_risk_router 
 from ml.predict import model_available
 
 
