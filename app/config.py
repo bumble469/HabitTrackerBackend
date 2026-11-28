@@ -11,11 +11,23 @@ for prefix in ("postgres://", "postgresql://"):
         break
 DATABASE_URL = _db_url
 
-CORS_ORIGINS = [
-    o.strip()
-    for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
-    if o.strip()
-]
+def _csv_env(name: str, default: str = "") -> list[str]:
+    """Comma-separated env var -> list. Tolerates spaces, quotes and trailing slashes."""
+    return [
+        item.strip().strip("\"'").rstrip("/")
+        for item in os.getenv(name, default).split(",")
+        if item.strip().strip("\"'")
+    ]
+
+
+# Everything CORS-related comes from the environment (no hardcoded origins).
+# CORS_ORIGINS=https://app.vercel.app,https://www.example.com,http://localhost:5173
+CORS_ORIGINS = _csv_env("CORS_ORIGINS")
+# Optional, e.g. to allow Vercel preview deploys: https://.*\.vercel\.app
+CORS_ORIGIN_REGEX = os.getenv("CORS_ORIGIN_REGEX", "").strip().strip("\"'") or None
+CORS_ALLOW_METHODS = _csv_env("CORS_ALLOW_METHODS", "*")
+CORS_ALLOW_HEADERS = _csv_env("CORS_ALLOW_HEADERS", "*")
+CORS_ALLOW_CREDENTIALS = os.getenv("CORS_ALLOW_CREDENTIALS", "false").strip().lower() == "true"
 
 JWT_SECRET = os.getenv("JWT_SECRET", "").strip()
 JWT_SECRET_IS_DEFAULT = not JWT_SECRET
