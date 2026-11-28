@@ -1,28 +1,28 @@
 # Habit Tracker Backend
 
-FastAPI backend for the Habit Tracker project. Two separate parts in one repo:
-
-- **`app/`** is the normal CRUD API: habits and completions, stored in Postgres.
-- **`ml/`** is the machine-learning part: training, prediction and one stateless endpoint, `POST /api/risk`. It does not touch the database.
+FastAPI backend for the Habit Tracker project. Users register and log in, their habits and check-ins are stored in Postgres (Neon), and a machine-learning model estimates which habits are at risk.
 
 The React frontend lives in a separate repo.
 
 ## Structure
 
 ```
-app/                  CRUD API
-  main.py             app, CORS, routers, /health
-  config.py  db.py  models.py  schemas.py  deps.py
-  routers/            habits.py, completions.py
-  services/data.py    data retrieval helpers
-ml/                   machine learning
-  data/               training CSV/Excel file lives here (see ml/data/README.md)
-  generate_data.py    step 1: creates ml/data/habit_logs.csv (synthetic data)
-  features.py         turns check-in dates into the 8 model features
-  train.py            step 2: reads ml/data, trains, writes model.joblib + metrics.json
-  predict.py          loads the model, scores habits, explains the score
-  api.py, schemas.py  POST /api/risk
-tests/                pytest
+app/                    API
+  main.py               app, CORS, routers, /health
+  config.py  db.py  models.py  schemas.py  deps.py  security.py
+  routers/              thin route files: auth, habits, completions, transfer, risk, push
+  services/             the logic behind the routes (controllers)
+    auth_service, habit_service, completion_service, transfer_service, risk_service
+    push_service        manages browser push subscriptions and notifications
+    reminder_scheduler  sends scheduled habit reminders
+ml/                     machine learning
+  data/                 training CSV lives here (see ml/data/README.md)
+  generate_data.py      step 1: creates ml/data/habit_logs.csv (synthetic data)
+  features.py           turns check-in dates into the model features
+  train.py              step 2: trains, writes model.joblib + metrics.json
+  predict.py            loads the model, scores habits, explains the score
+  api.py, schemas.py    stateless POST /api/risk
+tests/                  pytest (uses an in-memory database)
 ```
 
 ## Setup (Windows)
@@ -31,42 +31,60 @@ tests/                pytest
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements-dev.txt
-copy .env.example .env
 ```
+Create a `.env` file in the backend root and add the settings you need from the table below. Never commit `.env`.
 
-### Generate the data, then train (two separate steps)
+| Variable | Needed | What it is |
+| --- | --- | --- |
+| `DATABASE_URL` | no | Neon connection string. Empty uses a local SQLite file (`dev.db`). |
+| `JWT_SECRET` | yes with Postgres | Signs login tokens. Generate: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
+| `CORS_ORIGINS` | no | Comma-separated frontend origins allowed to call the API (default `http://localhost:5173`). |
+| `PUSH_SCHEDULER_ENABLED` | no | Set to `true` to run habit reminders; requires VAPID settings and an always-on backend instance. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | for push | Web Push application server keys. Generate them with `python scripts/generate_vapid_keys.py`. Keep the private key secret. |
+| `VAPID_SUBJECT` | for push | Contact URI for Web Push, such as `mailto:you@example.com`. |
+
+Tables are created on startup. `create_all` never changes an existing table. For an existing database, apply the files in `migrations/` once, in order (`001_...`, then `002_...`), before starting the updated backend. Existing habits remain scheduled every day. On a local `dev.db`, just delete the file instead.
+
+### Run
+```
+uvicorn app.main:app --reload
+```
+Open http://localhost:8000/docs to try every endpoint (use the Authorize button with the token from register or login). Run the tests with `pytest`.
+
+### Train the model (only if you change the data or features)
 ```
 python -m ml.generate_data
 python -m ml.train
 ```
-1. `generate_data` writes `ml/data/habit_logs.csv` and prints a summary (completion rate, dropout share, habits per profile). Check it before training. You can skip this step and put your own `.csv` or `.xlsx` in `ml/data/` instead (columns in `ml/data/README.md`).
-2. `train` only reads the file in `ml/data/`. It never generates data. It creates `ml/model.joblib` and `ml/metrics.json` (accuracy, F1, ROC-AUC against the "always predict done" baseline). Add `--compare` to also test gradient boosting.
-
-### Run the API
-```
-uvicorn app.main:app --reload
-```
-Open http://localhost:8000/docs to try every endpoint. Run tests with `pytest`.
-
-- **Database:** leave `DATABASE_URL` empty to use a local SQLite file, or paste your Neon connection string. Tables are created on startup.
+`train` writes `ml/model.joblib` and `ml/metrics.json` (accuracy, F1, ROC-AUC against an "always predict done" baseline, split by habit). Add `--compare` to also test gradient boosting. The data is synthetic, so the metrics show the model behaves sensibly, not how accurate it is on real users.
 
 ## Endpoints
 
+All routes need `Authorization: Bearer <token>` except register, login, `/health` and `POST /api/risk`. Dates are local `YYYY-MM-DD` (use `toLocaleDateString('en-CA')`, not `toISOString()`).
+
 | Method | Path | Purpose |
 | --- | --- | --- |
+| POST | /api/auth/register | create account, returns token + user (send the browser timezone) |
+| POST | /api/auth/login | returns token + user |
+| GET/PATCH | /api/auth/me | read / update name, timezone, `ai_enabled` |
+| POST/GET | /api/habits | create / list (`?include_archived=true`) |
+| GET/PATCH/DELETE | /api/habits/{id} | read / update / archive (`?permanent=true` deletes for good) |
+| POST | /api/habits/{id}/restore | un-archive |
+| GET | /api/completions | `{habitId: [dates]}` for all active habits (`start`, `end` optional) |
+| GET | /api/habits/{id}/completions | dates of one habit |
+| PUT/DELETE | /api/habits/{id}/completions/{date} | check in / undo |
+| GET | /api/risk | ML risk for every habit, from the database (`?today=` optional). Needs AI on. |
+| GET | /api/habits/{id}/risk/history | saved daily risk snapshots |
+| POST | /api/risk | stateless: post `{today, habits, completions}`, no login or database |
+| GET | /api/push/public-key | public VAPID key for browser subscription |
+| POST | /api/push/subscribe, POST /api/push/unsubscribe | manage browser push subscription |
+| GET | /api/push/status | view push subscription status |
+| POST | /api/push/test | send a test notification |
+| GET | /api/export, POST /api/import | move habits in and out as JSON |
 | GET | /health | status and whether the model is loaded |
-| POST/GET | /api/habits | create / list habits |
-| GET/PATCH/DELETE | /api/habits/{id} | read / update / delete a habit |
-| GET | /api/completions | `{habitId: [dates]}` for the user |
-| GET | /api/habits/{id}/completions | dates for one habit (`start`, `end` optional) |
-| PUT/DELETE | /api/habits/{id}/completions/{YYYY-MM-DD} | check in / undo |
-| POST | /api/risk | post `{today, habits, completions}`, get risk per habit (no database needed) |
-
-CRUD endpoints need an `X-User-Id` header (any id the frontend generates once per browser).
-Send dates as local `YYYY-MM-DD` (e.g. `toLocaleDateString('en-CA')`), not `toISOString()`, to avoid timezone shifts.
 
 ## Deployment
 
-- **Render (web service):** build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`. Set `DATABASE_URL` and `CORS_ORIGINS` (your frontend URL).
-- Commit `ml/model.joblib`, and pin the scikit-learn, numpy and joblib versions in `requirements.txt` to match the ones you trained with.
+- **Render (web service):** build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`. Set `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS` (your frontend URL), and the VAPID settings if push notifications are enabled.
+- `ml/model.joblib` is committed on purpose. Keep the scikit-learn, numpy and joblib versions in `requirements.txt` the same as the ones used to train it.
 - Render's free tier sleeps when idle, so open `/health` a minute before a demo.

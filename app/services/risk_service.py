@@ -23,7 +23,9 @@ def compute_risk(db: Session, user: User, today: Optional[date] = None) -> list[
         return []
     t = today_for(user, today)
     as_of = t - timedelta(days=1)  # today may still be incomplete
-    items = score_habits([(h.id, h.created_on) for h in habits], completions, t)
+    items = score_habits(
+        [(h.id, h.created_on, h.scheduled_days) for h in habits], completions, t
+    )
 
     version = _model_version()
     for item in items:

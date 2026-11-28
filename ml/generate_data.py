@@ -3,6 +3,7 @@ import csv
 import random
 from datetime import date, timedelta
 from pathlib import Path
+import math
 
 OUT_FILE = Path(__file__).resolve().parent / "data" / "habit_logs.csv"
 FIRST_CREATED = date(2026, 1, 1)
@@ -73,25 +74,26 @@ def base_probability(h: dict, i: int, weekday: int) -> float:
     if weekday >= 5:
         p *= h["weekend"]
     if i < 14:
-        p *= 0.92  # new habits are slightly less stable
+        p *= 0.92  
     return p
 
 
-def simulate(rng: random.Random, h: dict) -> set:
+def simulate(rng: random.Random, h: dict, sharpness: float = 1.0) -> set:
     done = set()
     prev_done = rng.random() < 0.7
     for i in range(h["length"]):
         day = h["created"] + timedelta(days=i)
         p = base_probability(h, i, day.weekday())
-        p += h["momentum"] if prev_done else -h["momentum"]  # misses come in clusters
+        p += h["momentum"] if prev_done else -h["momentum"] 
         p = min(max(p, 0.01), 0.99)
+        p = 1 / (1 + math.exp(-sharpness * math.log(p / (1 - p))))
         prev_done = rng.random() < p
         if prev_done:
             done.add(day)
     return done
 
 
-def generate(n_habits: int, seed: int) -> list[dict]:
+def generate(n_habits: int, seed: int, sharpness: float = 1.0) -> list[dict]:
     rng = random.Random(seed)
     names = [name for name, _ in PROFILES]
     weights = [share for _, share in PROFILES]
@@ -99,7 +101,7 @@ def generate(n_habits: int, seed: int) -> list[dict]:
     for n in range(1, n_habits + 1):
         h = make_habit(rng, rng.choices(names, weights)[0])
         h["id"] = f"h{n:04d}"
-        h["done"] = simulate(rng, h)
+        h["done"] = simulate(rng, h, sharpness)
         h["until"] = h["created"] + timedelta(days=h["length"] - 1)
         habits.append(h)
     return habits
@@ -123,7 +125,7 @@ def summary(habits: list[dict], rows: int, path: Path) -> None:
     habit_days = sum(h["length"] for h in habits)
     completed = sum(len(h["done"]) for h in habits)
     labels = dropouts = 0
-    for h in habits:  # same label the model trains on: missed on ALL of the next 3 days
+    for h in habits:  
         day = h["created"] + timedelta(days=14)
         last = h["until"] - timedelta(days=3)
         while day <= last:
@@ -147,11 +149,12 @@ def summary(habits: list[dict], rows: int, path: Path) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--habits", type=int, default=800)
+    parser.add_argument("--habits", type=int, default=7500)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out", default=str(OUT_FILE))
+    parser.add_argument("--sharpness", type=float, default=2.0, help="1.0 = noisiest; higher = less random")
     args = parser.parse_args()
 
-    data = generate(args.habits, args.seed)
+    data = generate(args.habits, args.seed, args.sharpness)
     out = Path(args.out)
     summary(data, write_csv(data, out), out)

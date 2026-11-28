@@ -4,7 +4,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 
-from ml.features import FEATURES, MIN_HISTORY_DAYS, build_features
+from ml.features import FEATURES, MIN_HISTORY_DAYS, build_features, build_features_scheduled
 
 MODEL_PATH = Path(__file__).resolve().parent / "model.joblib"
 
@@ -65,25 +65,40 @@ def explain(model, features: dict, top_n: int = 2) -> list[str]:
 
 
 def score_habits(habits, completions: dict, today: date) -> list[dict]:
-    """habits: list of (habit_id, created_on). completions: {habit_id: set of dates}.
+    """habits: (habit_id, created_on[, scheduled_days]) tuples; completions map ids to dates.
 
     Features are computed as of yesterday because today may still be incomplete.
+    Habits that run on only some weekdays are judged on their scheduled days only.
     """
-    model = get_model()
     as_of = today - timedelta(days=1)
     out = []
-    for habit_id, created_on in habits:
-        if (as_of - created_on).days < MIN_HISTORY_DAYS:
+    model = None
+    for habit_data in habits:
+        habit_id, created_on = habit_data[:2]
+        scheduled_days = habit_data[2] if len(habit_data) > 2 else None
+        done = completions.get(habit_id, set())
+        custom = bool(scheduled_days) and set(scheduled_days) != set(range(7))
+        if custom:
+            f, scheduled_count = build_features_scheduled(done, created_on, as_of, scheduled_days)
+            history = scheduled_count - 1
+            too_new = f"Needs about {MIN_HISTORY_DAYS} scheduled days of history before it can be scored"
+        else:
+            history = (as_of - created_on).days
+            too_new = "Habit is too new to score yet"
+        if history < MIN_HISTORY_DAYS:
             out.append(
                 {
                     "habit_id": habit_id,
                     "risk": None,
                     "level": "not_enough_data",
-                    "reasons": ["Habit is too new to score yet"],
+                    "reasons": [too_new],
                 }
             )
             continue
-        f = build_features(completions.get(habit_id, set()), created_on, as_of)
+        if model is None:
+            model = get_model()
+        if not custom:
+            f = build_features(done, created_on, as_of)
         p = float(model.predict_proba([[f[k] for k in FEATURES]])[0, 1])
         out.append(
             {

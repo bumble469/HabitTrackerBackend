@@ -5,12 +5,10 @@ from typing import Optional
 from sqlalchemy import (
     JSON,
     Boolean,
-    CheckConstraint,
     Date,
     DateTime,
     Float,
     ForeignKey,
-    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -40,7 +38,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     habits: Mapped[list["Habit"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    conversations: Mapped[list["Conversation"]] = relationship(
+    push_subscriptions: Mapped[list["PushSubscription"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
@@ -56,8 +54,10 @@ class Habit(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     created_on: Mapped[date] = mapped_column(Date, default=date.today)
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    is_demo: Mapped[bool] = mapped_column(Boolean, default=False)  # created by "Load demo data"; shown with a Demo tag
-
+    reminder_time: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
+    scheduled_days: Mapped[Optional[list[int]]] = mapped_column(
+        JSON, nullable=True, default=lambda: list(range(7))
+    )
     user: Mapped["User"] = relationship(back_populates="habits")
     completions: Mapped[list["Completion"]] = relationship(
         back_populates="habit", cascade="all, delete-orphan"
@@ -103,49 +103,33 @@ class RiskPrediction(Base):
     habit: Mapped["Habit"] = relationship(back_populates="predictions")
 
 
-class Conversation(Base):
-    __tablename__ = "conversations"
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
 
-    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(
         String(32), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
-    title: Mapped[str] = mapped_column(String(200), default="New chat")
+    endpoint: Mapped[str] = mapped_column(String(1024), unique=True)
+    p256dh: Mapped[str] = mapped_column(String(255))
+    auth: Mapped[str] = mapped_column(String(255))
+    user_agent: Mapped[str] = mapped_column(String(255), default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    user: Mapped["User"] = relationship(back_populates="conversations")
-    messages: Mapped[list["ChatMessage"]] = relationship(
-        back_populates="conversation", cascade="all, delete-orphan", order_by="ChatMessage.id"
-    )
+    user: Mapped["User"] = relationship(back_populates="push_subscriptions")
 
 
-class ChatMessage(Base):
-    __tablename__ = "chat_messages"
-    __table_args__ = (CheckConstraint("role IN ('user', 'assistant')", name="ck_chat_role"),)
+class ReminderLog(Base):
+    """One row = a reminder was sent for that habit on that local day (prevents duplicates)."""
+
+    __tablename__ = "reminder_logs"
+    __table_args__ = (UniqueConstraint("habit_id", "day", name="uq_reminder_habit_day"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    conversation_id: Mapped[str] = mapped_column(
-        String(32), ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    habit_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("habits.id", ondelete="CASCADE"), index=True
     )
-    role: Mapped[str] = mapped_column(String(10))  # "user" or "assistant"
-    content: Mapped[str] = mapped_column(Text)
-    sources: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # kb_notes ids used for this answer
-    context: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # habit/risk summary sent to the LLM
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-
-    conversation: Mapped["Conversation"] = relationship(back_populates="messages")
-
-
-class KbNote(Base):
-    """One short habit-science note = one retrieval chunk (notes are only a few hundred words)."""
-
-    __tablename__ = "kb_notes"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    title: Mapped[str] = mapped_column(String(200))
-    topic: Mapped[str] = mapped_column(String(100), index=True)
-    content: Mapped[str] = mapped_column(Text)
-    embedding: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
-    embedding_model: Mapped[str] = mapped_column(String(100), default="")
+    day: Mapped[date] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

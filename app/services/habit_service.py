@@ -13,6 +13,8 @@ def create_habit(db: Session, user: User, body: HabitCreate) -> Habit:
         name=body.name,
         description=body.description,
         created_on=body.created_on or today_for(user),
+        reminder_time=body.reminder_time,
+        scheduled_days=body.scheduled_days,
     )
     db.add(habit)
     db.commit()
@@ -37,6 +39,10 @@ def update_habit(db: Session, user: User, habit_id: str, body: HabitUpdate) -> H
         habit.name = body.name
     if body.description is not None:
         habit.description = body.description
+    if "reminder_time" in body.model_fields_set:
+        habit.reminder_time = body.reminder_time
+    if "scheduled_days" in body.model_fields_set:
+        habit.scheduled_days = body.scheduled_days
     db.commit()
     db.refresh(habit)
     return habit
